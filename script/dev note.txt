@@ -1,0 +1,13 @@
+	The *net.IPAddr type is much rarer in that specific context; it usually appears when you are doing things like DNS lookups or specific low-level socket work.
+	case *net.IPAddr:
+		// IPAddr doesn't have a Mask, so we can't return it as a *net.IPNet
+		// If you need a *net.IPNet, you'd have to create one manually:
+		if v.IP.To4() != nil {
+			return &net.IPNet{IP: v.IP, Mask: net.CIDRMask(32, 32)}, nil
+		}
+
+
+your Filter for active interfaces may be flawed becase if can still pick This may still pick:
+Docker bridge
+VPN tunnel
+Virtual interfaces
