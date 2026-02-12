@@ -11,3 +11,30 @@ your Filter for active interfaces may be flawed becase if can still pick This ma
 Docker bridge
 VPN tunnel
 Virtual interfaces
+
+
+
+Why this approach is better to ScanNetwork:
+Concurrency: Instead of waiting for .1 to finish before checking .2, it fires off all requests at once. The total execution time will be roughly 500ms (the timeout length) regardless of how many IPs are in the /24 range.
+
+WaitGroups: wg.Wait() ensures the function doesn't return an empty list before the background scans actually finish.
+
+Mutex (sync.Mutex): In Go, multiple goroutines cannot write to the same slice at the exact same time without risking a crash or data corruption. The mu.Lock() ensures only one worker adds its result at a time.
+
+Byte Copying: Notice append(net.IP(nil), startIP...). This creates a unique copy of the IP for the loop, preventing the "flaw" where every goroutine accidentally points to the same memory address.
+
+A Small Warning
+Scanning a /24 (256 IPs) is perfectly fine. However, if you try this on a /16 (65,536 IPs), you might hit "too many open files" errors on your OS. For massive ranges, you would need a Worker Pool to limit the number of active scans to something like 1000 at a time.
+
+Would you like me to show you how to implement a Worker Pool to handle larger CIDR blocks safely?
+
+
+
+
+
+
+1) ARP Scan      → Who exists on my LAN (most accurate)
+2) ICMP Ping     → Who responds to ping
+3) TCP Probe     → Who has open services
+4) mDNS / NBNS   → Who are you (hostname + device type)
+5) OS Fingerprint → What are you running

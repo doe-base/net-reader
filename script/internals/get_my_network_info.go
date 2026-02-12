@@ -36,6 +36,8 @@ func GetMyNetworkInfo(w http.ResponseWriter, r *http.Request) {
 			// using Local OUI Database to get vendor name
 			vendor := utils.LookupOUI(iface.HardwareAddr)
 
+			yes, _ := ARPScan(ipv4, &iface)
+			fmt.Println(yes)
 			fmt.Fprintf(w, "Found Active Network %d: %s (MAC: %s) \n", index, iface.Name, iface.HardwareAddr)
 			fmt.Fprintf(w, "Device Name: %s (IP: %s) (Vendor: %s)\n", deviceName, ipv4.IP.String(), vendor)
 			fmt.Fprintf(w, "IP Address: %s\n", ipAddress)
