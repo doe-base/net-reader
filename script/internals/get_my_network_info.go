@@ -2,6 +2,7 @@ package internals
 
 import (
 	"conceptual-lan/utils"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -9,45 +10,87 @@ import (
 	"strings"
 )
 
-func GetMyNetworkInfo(w http.ResponseWriter, r *http.Request) {
+type NetworkDevice struct {
+	Index      int    `json:"index"`
+	Interface  string `json:"interface"`
+	MAC        string `json:"mac"`
+	DeviceName string `json:"deviceName"`
+	IP         string `json:"ip"`
+	Vendor     string `json:"vendor"`
+	LocalIP    string `json:"localIp"` // <-- json tag
+}
 
-	// get all the deive interface (ethenet, wifi, vpn, usb tethering)
+func GetMyNetworkInfo(w http.ResponseWriter, r *http.Request) {
+	// get all the device interfaces (ethernet, wifi, vpn, usb tethering)
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	//Filter for active interfaces that is not system loopback
+	devices := []NetworkDevice{}
+
+	// Filter for active interfaces that are not loopback
 	for index, iface := range ifaces {
 		isUp := iface.Flags&net.FlagUp != 0
 		isNotLoopback := iface.Flags&net.FlagLoopback == 0
 
 		if isUp && isNotLoopback {
 			ipv4, _ := filterForIPV4AndSubnet(iface.Addrs())
+			if ipv4 == nil {
+				continue
+			}
+
 			ipAddress := ipv4.String()
-			// Using Reverse DNS Lookup to get name of device name on network.
-			// This only works if router or device has a DNS record
-			names, err := net.LookupAddr(ipv4.IP.String())
+
+			// Reverse DNS lookup for device name
 			deviceName := "Unknown Device"
+			names, err := net.LookupAddr(ipv4.IP.String())
 			if err == nil && len(names) > 0 {
 				deviceName = names[0]
 			}
-			// using Local OUI Database to get vendor name
+
+			// Vendor lookup
 			vendor := utils.LookupOUI(iface.HardwareAddr)
 
-			yes, _ := ARPScan(ipv4, &iface)
-			fmt.Println(yes)
-			fmt.Fprintf(w, "Found Active Network %d: %s (MAC: %s) \n", index, iface.Name, iface.HardwareAddr)
-			fmt.Fprintf(w, "Device Name: %s (IP: %s) (Vendor: %s)\n", deviceName, ipv4.IP.String(), vendor)
-			fmt.Fprintf(w, "IP Address: %s\n", ipAddress)
-			fmt.Fprintf(w, "\n")
+			device := NetworkDevice{
+				Index:      index,
+				Interface:  iface.Name,
+				MAC:        iface.HardwareAddr.String(),
+				DeviceName: deviceName,
+				IP:         ipv4.IP.String(),
+				Vendor:     vendor,
+				LocalIP:    ipAddress,
+			}
+
+			devices = append(devices, device)
 		}
 	}
 
-	defaltGateway, _ := getDefaultGateway()
-	fmt.Fprintf(w, "\nYour Machine's Default Gateway: %s\n", defaltGateway)
+	// --- 2️⃣ Get default gateway ---
+	defGateway, _ := getDefaultGateway()
 
+	// --- 3️⃣ Include discovered peers ---
+	// For now, we assume a global peers map updated by BroadcastListener
+	// You can make it concurrent safe with a mutex if needed
+	peersList := []utils.PeerInfo{}
+	for ip, status := range utils.Peers {
+		peersList = append(peersList, utils.PeerInfo{
+			Name: status.Name,
+			IP:   ip,
+		})
+	}
+
+	// --- 4️⃣ Respond with combined JSON ---
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"count":          len(devices),
+		"devices":        devices,
+		"defaultGateway": defGateway,
+		"peers":          peersList,
+	})
 }
 
 // one iface.Addrs() can return multiple address object (of type: *net.IPNet, *net.IPAddr etc)

@@ -4,6 +4,7 @@ go 1.22.1
 
 require (
 	github.com/gorilla/mux v1.8.1 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/josharian/native v1.0.0 // indirect
 	github.com/mdlayher/arp v0.0.0-20220512170110-6706a2966875 // indirect
