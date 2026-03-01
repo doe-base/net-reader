@@ -1,12 +1,14 @@
 package main
 
 import (
-	"conceptual-lan/internals"
-	"conceptual-lan/utils"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+
+	"conceptual-lan/internals/communication"
+	"conceptual-lan/internals/discovery"
+	"conceptual-lan/utils"
 
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
@@ -15,31 +17,35 @@ import (
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+		log.Println("No .env file found")
 	}
-
-	// utils.DownloadOUI()
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = ":8080"
+		port = "8080"
 	}
 
-	hub := internals.NewHub()
-	go hub.Run() // Run the hub in the background
-
 	r := mux.NewRouter()
-	r.HandleFunc("/get-my-network-info", internals.GetMyNetworkInfo).Methods("GET")
-	r.HandleFunc("/ws/chat", hub.ChatWS)
-	// r.HandleFunc("/fs/list", internals.ListFiles).Methods("GET")
-	// r.HandleFunc("/peer/fs", internals.GetPeerFiles).Methods("GET")
 
-	//Middlewares
-	go utils.BroadcastListener()
-	go utils.CleanupPeers()
-	go utils.BroadcastSender()
-	r.Use(utils.CORSMiddleware)
+	// Chat endpoints
+	r.HandleFunc("/api/message", communication.ReceiveMessage).Methods("POST")
+	r.HandleFunc("/api/send", communication.SendMessageFromBrowser).Methods("POST")
+	r.HandleFunc("/api/messages", communication.GetMessages).Methods("GET")
 
-	fmt.Printf("Starting server on port %s...\n", port)
-	log.Fatal(http.ListenAndServe(port, r))
+	// Discovery endpoint
+	r.HandleFunc("/get-my-network-info", discovery.GetMyNetworkInfo).Methods("GET")
+
+	// File server (must come LAST)
+	fs := http.FileServer(http.Dir("/"))
+	r.PathPrefix("/").Handler(fs)
+
+	handler := utils.CORSMiddleware(r)
+
+	// Start discovery routines
+	go discovery.BroadcastListener()
+	go discovery.BroadcastSender()
+	go discovery.CleanupPeers()
+
+	fmt.Printf("🚀 Server running on :%s\n", port)
+	log.Fatal(http.ListenAndServe(":"+port, handler))
 }

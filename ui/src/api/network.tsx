@@ -1,4 +1,7 @@
+import type { Key } from "react"
+
 export interface NetworkDevice {
+  id: Key | null | undefined
   index: number
   interface: string
   mac: string

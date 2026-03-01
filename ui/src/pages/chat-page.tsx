@@ -1,16 +1,31 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useChat } from "../hooks/useChat"
-import type { PeerInfo } from "../api/network"
+import { useNetwork } from "../context/NetworkContext"
 import "../styles/chat.css"
 
-interface Props {
-  peers: PeerInfo[]
-}
-
-export default function ChatPage({ peers }: Props) {
+export default function ChatPage() {
+  const { data, loading, error, chatData } = useNetwork()
   const { messages, sendMessage } = useChat()
+
   const [text, setText] = useState<string>("")
   const [target, setTarget] = useState<string>("all")
+
+  const peers = data?.peers ?? []
+
+  useEffect(() => {
+    if (!peers.find(p => p.ip === target)) {
+      setTarget("all")
+    }
+  }, [peers])
+
+
+  if (loading) {
+    return <div className="chat-page">Loading network...</div>
+  }
+
+  if (error) {
+    return <div className="chat-page error">{error}</div>
+  }
 
   return (
     <div className="chat-page">
@@ -22,6 +37,7 @@ export default function ChatPage({ peers }: Props) {
         onChange={(e) => setTarget(e.target.value)}
       >
         <option value="all">All peers</option>
+
         {peers.map((peer) => (
           <option key={peer.ip} value={peer.ip}>
             {peer.name} ({peer.ip})
@@ -31,9 +47,9 @@ export default function ChatPage({ peers }: Props) {
 
       {/* Messages */}
       <div className="messages">
-        {messages.map((msg, idx) => (
+        {chatData.map((msg, idx) => (
           <div key={idx}>
-            <strong>{msg.from}</strong>: {msg.content}
+            <strong>{msg.from}</strong>: {msg.body} {/* <-- use body */}
           </div>
         ))}
       </div>
@@ -49,7 +65,7 @@ export default function ChatPage({ peers }: Props) {
         <button
           disabled={!text.trim()}
           onClick={() => {
-            sendMessage(target, text)
+            sendMessage(text)
             setText("")
           }}
         >

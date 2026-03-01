@@ -1,4 +1,4 @@
-package internals
+package discovery
 
 import (
 	"net/http"

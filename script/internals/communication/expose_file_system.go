@@ -1,4 +1,4 @@
-package internals
+package communication
 
 import (
 	"encoding/json"

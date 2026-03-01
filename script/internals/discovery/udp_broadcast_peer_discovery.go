@@ -1,10 +1,11 @@
-package utils
+package discovery
 
 import (
 	"encoding/json"
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -12,26 +13,18 @@ type PeerInfo struct {
 	Name string `json:"name"`
 	IP   string `json:"ip"`
 }
-
-// Add a struct to track timestamp
 type PeerStatus struct {
 	Name     string
 	LastSeen time.Time
 }
 
-/*
-1️⃣ Listens on a UDP port: 0.0.0.0:9999
-2️⃣ Broadcasts its identity every few seconds to: 255.255.255.255:9999 (every ip range). With Payload (example):
+var (
+	PeerMu sync.RWMutex
+	Peers  = make(map[string]PeerStatus)
+)
 
-	{
-		"name": "Daniel-PC",
-		"ip": "192.168.0.161"
-	}
-
-3️⃣ Receives broadcasts from others and Adds them to peer list
-*/
-var Peers = make(map[string]PeerStatus)
-
+// Listens on :9999, receives peer broadcasts, ignores its own messages,
+// and stores discovered peers in a shared map with a LastSeen timestamp.
 func BroadcastListener() {
 	pc, err := net.ListenPacket("udp4", ":9999")
 	if err != nil {
@@ -39,7 +32,6 @@ func BroadcastListener() {
 	}
 	defer pc.Close()
 
-	// Map to store discovered peers: [IP Address] -> Hostname
 	myIP := getLocalIP()
 
 	fmt.Println("Listening for peers...")
@@ -50,8 +42,6 @@ func BroadcastListener() {
 		if err != nil {
 			continue
 		}
-
-		fmt.Printf("Packet physically received from: %s\n", addr.String())
 
 		// 1. Decode the JSON
 		var info PeerInfo
@@ -64,10 +54,12 @@ func BroadcastListener() {
 		// Ignore self
 		if info.IP == myIP {
 			continue
+		} else {
+			fmt.Printf("Packet physically received from: %s\n", addr.String())
 		}
 
 		// Update peer map with timestamp
-		peerMu.Lock()
+		PeerMu.Lock()
 		if _, exists := Peers[info.IP]; !exists {
 			fmt.Printf("✨ New Peer Discovered: %s at %s\n", info.Name, info.IP)
 		}
@@ -75,9 +67,11 @@ func BroadcastListener() {
 			Name:     info.Name,
 			LastSeen: time.Now(),
 		}
-		peerMu.Unlock()
+		PeerMu.Unlock()
 	}
 }
+
+// Every 5 seconds, it broadcasts this machine’s hostname and local IP as JSON to 255.255.255.255:9999.
 func BroadcastSender() {
 	hostname, _ := os.Hostname()
 
@@ -95,7 +89,7 @@ func BroadcastSender() {
 			IP:   getLocalIP(),
 		}
 		msg, _ := json.Marshal(info)
-		_, err := conn.Write(msg) // Now you can just use Write
+		_, err := conn.Write(msg)
 
 		if err != nil {
 			fmt.Println("Error:", err)
@@ -104,8 +98,7 @@ func BroadcastSender() {
 	}
 }
 
-// Helper to find the actual local network IP (not 127.0.0.1)
-// RETURNS THE FIRST NON-LOOP IP
+// Finds the first non-loopback IPv4 address of the machine.
 func getLocalIP() string {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -121,19 +114,20 @@ func getLocalIP() string {
 	return "127.0.0.1"
 }
 
+// Runs periodically and removes peers that haven’t been seen for 15 seconds.
 func CleanupPeers() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		now := time.Now()
-		peerMu.Lock()
+		PeerMu.Lock()
 		for ip, p := range Peers {
 			if now.Sub(p.LastSeen) > 15*time.Second {
 				fmt.Printf("⚠️ Peer expired: %s at %s\n", p.Name, ip)
 				delete(Peers, ip)
 			}
 		}
-		peerMu.Unlock()
+		PeerMu.Unlock()
 	}
 }

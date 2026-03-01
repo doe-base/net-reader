@@ -1,4 +1,4 @@
-package internals
+package discovery
 
 import (
 	"conceptual-lan/utils"
@@ -73,9 +73,9 @@ func GetMyNetworkInfo(w http.ResponseWriter, r *http.Request) {
 	// --- 3️⃣ Include discovered peers ---
 	// For now, we assume a global peers map updated by BroadcastListener
 	// You can make it concurrent safe with a mutex if needed
-	peersList := []utils.PeerInfo{}
-	for ip, status := range utils.Peers {
-		peersList = append(peersList, utils.PeerInfo{
+	peersList := []PeerInfo{}
+	for ip, status := range Peers {
+		peersList = append(peersList, PeerInfo{
 			Name: status.Name,
 			IP:   ip,
 		})

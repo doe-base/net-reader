@@ -44,8 +44,9 @@ export default function NetworkCard({ device, peers }: Props) {
             {peers.map((peer) => (
               <li key={peer.ip}>
                 <Link
-                  to={`/peer/${peer.ip}`}
+                  to={`http://${peer.ip}:8080/`}
                   className="peer-link"
+                  target="_blank"
                 >
                   <span className="peer-name">{peer.name}</span>
                   <span className="peer-ip">{peer.ip}</span>
